@@ -1,0 +1,100 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure("2") do |config|
+
+  # Define the first VM
+  config.vm.define "controller" do |node|
+    node.vm.box = "generic/ubuntu2004"
+    node.vm.hostname = "controller"
+    node.vm.network "private_network", ip: "192.168.33.10"
+    node.vm.network "private_network", ip: "192.168.10.10"
+    
+    node.vm.provider "libvirt" do |vb|
+      vb.memory = "512"
+      vb.cpus = "1"
+    end
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.cpus = "1"
+    end    
+    
+    node.vm.provision "shell", inline: <<-SHELL
+      # Unset IP on eth2, which will used for testing OVN localnet
+      ip addr del 192.168.10.10/24 dev eth2
+
+      # Use Google DNS
+      sed -i '/^DNS/c\DNS=8.8.8.8' /etc/systemd/resolved.conf
+      systemctl restart systemd-resolved.service 
+
+      # change repoisitory mirror
+      sed -i 's/us.archive.ubuntu.com/free.nchc.org.tw/g' /etc/apt/sources.list
+      sed -i 's/security.ubuntu.com/free.nchc.org.tw/g' /etc/apt/sources.list
+
+      # Install OVN packges
+      apt-get update
+      apt-get -y install build-essential fakeroot
+      apt-get -y install python-six openssl
+      apt-get -y install openvswitch-switch openvswitch-common
+      apt-get -y install ovn-central ovn-common ovn-host
+
+      # Setup controller
+      # ovs-vsctl add-br br-int -- set Bridge br-int fail-mode=secure
+      ovn-nbctl set-connection ptcp:6641:192.168.33.10 
+      ovn-sbctl set-connection ptcp:6642:192.168.33.10
+      ovs-vsctl set open . external-ids:ovn-remote=tcp:192.168.33.10:6642
+      ovs-vsctl set open . external-ids:ovn-encap-type=geneve
+      ovs-vsctl set open . external-ids:ovn-encap-ip=192.168.33.10
+    SHELL
+  end
+
+  # Define the second VM
+  config.vm.define "node" do |node|
+    node.vm.box = "generic/ubuntu2004"
+    node.vm.hostname = "node"
+    node.vm.network "private_network", ip: "192.168.33.20"
+    node.vm.network "private_network", ip: "192.168.10.20"
+    
+    node.vm.provider "libvirt" do |vb|
+      vb.memory = "512"
+      vb.cpus = "1"
+    end
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.cpus = "1"
+    end 
+
+    node.vm.provision "shell", inline: <<-SHELL
+      # Unset IP on eth2, which will used for testing OVN localnet
+      ip addr del 192.168.10.20/24 dev eth2
+
+      # Use Google DNS
+      sed -i '/^DNS/c\DNS=8.8.8.8' /etc/systemd/resolved.conf
+      systemctl restart systemd-resolved.service 
+
+      # change repoisitory mirror
+      sed -i 's/us.archive.ubuntu.com/free.nchc.org.tw/g' /etc/apt/sources.list
+      sed -i 's/security.ubuntu.com/free.nchc.org.tw/g' /etc/apt/sources.list
+
+      # Install OVN packges
+      apt-get update
+      apt-get -y install build-essential fakeroot
+      apt-get -y install python-six openssl
+      apt-get -y install openvswitch-switch openvswitch-common
+      apt-get -y install ovn-common ovn-host
+
+      # Setup node
+      # ovs-vsctl add-br br-int -- set Bridge br-int fail-mode=secure
+      ovs-vsctl set open . external-ids:ovn-remote=tcp:192.168.33.10:6642
+      ovs-vsctl set open . external-ids:ovn-encap-type=geneve
+      ovs-vsctl set open . external-ids:ovn-encap-ip=192.168.33.20
+    SHELL
+  end
+
+end

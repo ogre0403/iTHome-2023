@@ -3,7 +3,7 @@
 
 servers = [
   { :hostname => "controller", :ip1 => "192.168.33.10", :ip2 => "192.168.10.10", :cpu => "1", :memory => "512" },
-  { :hostname => "node"      , :ip1 => "192.168.33.20", :ip2 => "192.168.10.20", :cpu => "1", :memory => "512" },
+  { :hostname => "hypervisor", :ip1 => "192.168.33.20", :ip2 => "192.168.10.20", :cpu => "1", :memory => "512" },
 ]
 
 controller_index = 0
@@ -46,7 +46,7 @@ Vagrant.configure("2") do |config|
 
         # Install OVN packges
         apt-get update
-        apt-get -y install build-essential fakeroot
+        apt-get -y install build-essential fakeroot net-tools bridge-utils
         apt-get -y install python-six openssl
         apt-get -y install openvswitch-switch openvswitch-common
         apt-get -y install ovn-common ovn-host

@@ -18,14 +18,11 @@ Vagrant.configure("2") do |config|
       node.vm.network "private_network", ip: conf[:ip1]
       node.vm.network "private_network", ip: conf[:ip2]
       
-      node.vm.provider "libvirt" do |vb|
-        vb.memory = conf[:memory]
-        vb.cpus = conf[:cpu]
-      end
-  
-      node.vm.provider "virtualbox" do |vb|
-        vb.memory = conf[:memory]
-        vb.cpus = conf[:cpu]
+      ["libvirt", "virtualbox"].each do |provider|
+        config.vm.provider provider do |vb|
+          vb.memory = conf[:memory]
+          vb.cpus = conf[:cpu]
+        end
       end
 
       # Unset IP on eth2, which will used for testing OVN localnet
@@ -43,6 +40,9 @@ Vagrant.configure("2") do |config|
         # change repoisitory mirror
         sed -i 's/us.archive.ubuntu.com/free.nchc.org.tw/g' /etc/apt/sources.list
         sed -i 's/security.ubuntu.com/free.nchc.org.tw/g' /etc/apt/sources.list
+
+        # clone sample
+        git clone https://github.com/ogre0403/iTHome-2023.git /opt/iTHome-2023
 
         # Install OVN packges
         apt-get update

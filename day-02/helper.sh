@@ -14,13 +14,18 @@ function create-ns {
     ip netns exec $1 ip link set eth0 up
 }
 
-# create a function to create bridge
+# function to create bridge
 # arg1: bridge name
-function create-br-and-assign-iface {
+function create-br {
     brctl addbr $1
     ip link set $1 up
-    veth_pair=$(ip -o link show type veth | awk -F': ' '{print $2}' | cut -d @ -f 1)
 
+}
+
+# function to assign interface to bridge
+# arg1: bridge name
+function assign-iface-to-br {
+    veth_pair=$(ip -o link show type veth | awk -F': ' '{print $2}' | cut -d @ -f 1)
     for i in $veth_pair; do
         brctl addif $1 $i
     done
@@ -29,9 +34,13 @@ function create-br-and-assign-iface {
 
 # create ovn logical switch and assign interface
 # arg1: logical switch name
-function create-ovn-ls-and-assign-iface {
+function create-ovn-ls {
     ovn-nbctl ls-add $1
+}
 
+# function to assign interface to ovn logical switch
+# arg1: logical switch name
+function assign-iface-to-ovn-ls {
     ns_list=$(ip netns list | cut -d ' ' -f 1)
 
     for ns in $ns_list; do

@@ -34,19 +34,23 @@ function assign-iface-to-br {
 
 # create ovn logical switch and assign interface
 # arg1: logical switch name
-function create-ovn-ls {
+function create-ovn-ls-and-lsp {
     ovn-nbctl ls-add $1
+
+    ns_list=$(ip netns list | cut -d ' ' -f 1)
+    for ns in $ns_list; do
+        ovn-nbctl lsp-add $1 $1-$ns
+        ovn-nbctl lsp-set-addresses $1-$ns $(ip netns exec $ns ip link show eth0 |grep link/ether | awk '{print $2}')
+    done
+
 }
 
 # function to assign interface to ovn logical switch
 # arg1: logical switch name
-function assign-iface-to-ovn-ls {
+function assign-iface-to-ovn-lsp {
     ns_list=$(ip netns list | cut -d ' ' -f 1)
 
     for ns in $ns_list; do
-        ovn-nbctl lsp-add $1 $1-$ns
-        ovn-nbctl lsp-set-addresses $1-$ns $(ip netns exec $ns ip link show eth0 |grep link/ether | awk '{print $2}')
-
         ovs-vsctl add-port br-int veth-$ns-br
         ovs-vsctl set Interface veth-$ns-br external_ids:iface-id=$1-$ns
     done

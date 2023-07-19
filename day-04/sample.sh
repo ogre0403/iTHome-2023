@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source helpers.sh
+source helper.sh
 
 create-ns ns1 192.168.1.1 192.168.1.254
 create-ns ns2 192.168.1.2 192.168.1.254

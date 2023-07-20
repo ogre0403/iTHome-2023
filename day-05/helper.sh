@@ -5,7 +5,7 @@
 # arg3: default gw ip address
 function create-ns {
 
-    if [ $# -ne 2 ]; then
+    if [ $# -lt 2 ]; then
         echo "Usage: ${FUNCNAME[0]} <namespace name> <ip address> [<default gw ip address>]"
         return 1
     fi
@@ -26,21 +26,24 @@ function create-ns {
 
 # create ovn logical switch and logical port
 # arg1: logical switch name
-# arg2: list of namespace name
 function create-ovn-ls-and-lsp {
 
-    if [ $# -lt 2 ]; then
+    if [ $# -ne 1 ]; then
         echo "Usage: ${FUNCNAME[0]} <logical switch name> <list of namespace name>"
         return 1
     fi
 
-    sw=$1
-    ovn-nbctl ls-add $sw
-    
-    shift
-    for ns in "$@"; do
-        ovn-nbctl lsp-add $sw $sw-$ns
-        ovn-nbctl lsp-set-addresses $sw-$ns $(ip netns exec $ns ip link show eth0 |grep link/ether | awk '{print $2}')
+    hypervisor_list=(192.168.33.10 192.168.33.20)
+
+    ovn-nbctl ls-add $1
+
+    for hypervisor in ${hypervisor_list[@]}; do
+        ns_list=$(ssh -oStrictHostKeyChecking=no vagrant@$hypervisor sudo ip netns list | cut -d ' ' -f 1)
+        for ns in $ns_list; do
+            port_mac=$(ssh -oStrictHostKeyChecking=no vagrant@$hypervisor sudo ip netns exec $ns ip link show eth0 |grep link/ether | awk '{print $2}')
+            ovn-nbctl lsp-add $1 $1-$ns
+            ovn-nbctl lsp-set-addresses $1-$ns ${port_mac}
+        done
     done
 }
 

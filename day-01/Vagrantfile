@@ -56,7 +56,8 @@ Vagrant.configure("2") do |config|
 
         # Install OVN packges
         apt-get update
-        apt-get -y install build-essential fakeroot net-tools bridge-utils
+        apt-get -y install jq net-tools bridge-utils 
+        apt-get -y install build-essential fakeroot
         apt-get -y install python-six openssl
         apt-get -y install openvswitch-switch openvswitch-common
         apt-get -y install ovn-common ovn-host

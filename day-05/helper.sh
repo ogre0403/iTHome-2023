@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # create function accept two args
 # arg1: namespace name

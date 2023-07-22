@@ -36,7 +36,7 @@ Vagrant.configure("2") do |config|
       end
 
       # Unset IP on eth2, which will used for testing OVN localnet
-      node.vm.provision :shell do |s|
+      node.vm.provision :shell, :run => 'always' do |s|
         s.inline = 'ip addr del $1/24 dev eth2'
         s.args = "#{conf[:ip2]}"
       end

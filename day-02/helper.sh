@@ -1,17 +1,36 @@
 #!/bin/bash
 
 
+function generate-mac {
+    printf '02:00:%02x:%02x:%02x:%02x\n' $[RANDOM%256] $[RANDOM%256] $[RANDOM%256] $[RANDOM%256]
+}
+
 # create function accept two args
 # arg1: namespace name
 # arg2: ip address
+# arg3: default gw ip address
 function create-ns {
+
+    if [ $# -lt 1 ]; then
+        echo "Usage: ${FUNCNAME[0]} <namespace name> <ip address> [<default gw ip address>]"
+        return 1
+    fi
+
     ip netns add $1
     ip link add veth-$1 type veth peer name veth-$1-br
     ip link set veth-$1-br up
     ip link set veth-$1 netns $1
     ip netns exec $1 ip link set veth-$1 name eth0
-    ip netns exec $1 ip addr add local $2/24 dev eth0
+    
+    if [ $# -ge 2 ]; then
+        ip netns exec $1 ip addr add local $2/24 dev eth0
+    fi
+    
     ip netns exec $1 ip link set eth0 up
+
+    if [ $# -eq 3 ]; then
+        ip netns exec $1 ip r add default via $3
+    fi
 }
 
 # function to create bridge

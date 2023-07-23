@@ -34,72 +34,73 @@ function create-ns {
 
 
 
+# functuon create dhcp options for logical switch 
+# arg1: subnet cidr 
+# arg2: default gw
+function create-dhcp-options {
 
-# functuon create dynamic ovn logical switch 
-# arg1: logical switch name
-# arg2: subnet cidr 
-# arg3: default gw
-function create-ovn-ls {
-    if [ $# -lt 3 ]; then
-        echo "Usage: ${FUNCNAME[0]} <logical switch name> <subnet_cidr>"
+    if [ $# -ne 2 ]; then
+        echo "Usage: ${FUNCNAME[0]} <subnet_cidr> <default_gw>"
         return 1
-    fi
+    fi  
 
     mac_addr=$(generate-mac)
 
-    sw=$1
-    ovn-nbctl ls-add $sw 
-    ovn-nbctl set logical_switch $sw other_config:subnet="$2" 
-
-    UUID=$(ovn-nbctl create dhcp_options cidr=$2 options="\"lease_time\"=\"3600\" \"router\"=\"$3\" \"server_id\"=\"$3\" \"server_mac\"=\"$mac_addr\"")
+    UUID=$(ovn-nbctl create dhcp_options cidr=$1 options="\"lease_time\"=\"3600\" \"router\"=\"$2\" \"server_id\"=\"$2\" \"server_mac\"=\"$mac_addr\"")
 
     echo $UUID
 }
 
 
-
-
-# create ovn logical switch and logical port
+# create ovn logical switch and assign interface
 # arg1: logical switch name
 # arg2: dhcp_option uuid
-# arg3: list of namespace name
-function create-dynamic-lsp {
+# arg3: subnet cidr 
+function create-ovn-ls-and-lsp {
 
-    if [ $# -lt 2 ]; then
-        echo "Usage: ${FUNCNAME[0]} <logical switch name> <dhcp_option_uuid> [<list of namespace name>]"
+    if [ $# -lt 1 ]; then
+        echo "Usage: ${FUNCNAME[0]} <logical switch name> [<dhcp_option_uuid> <subnet_cidr>]"
         return 1
     fi  
 
-    sw=$1
-    shift
+    if [ $# -eq 2 ]; then
+        echo "Usage: ${FUNCNAME[0]} <logical switch name> [<dhcp_option_uuid> <subnet_cidr>]"
+        return 1
+    fi  
 
-    dhcp_uuid=$1
-    shift
+    ovn-nbctl ls-add $1
 
-    for ns in "$@"; do
-        ovn-nbctl lsp-add $sw $sw-$ns
+    if [ $# -eq 3 ]; then
+        ovn-nbctl set logical_switch $1 other_config:subnet="$3" 
+    fi
+
+    ns_list=$(ip netns list | cut -d ' ' -f 1)
+    for ns in $ns_list; do
+        ovn-nbctl lsp-add $1 $1-$ns
         mac=$(ip netns exec $ns ip link show eth0 |grep link/ether | awk '{print $2}')
-        ovn-nbctl lsp-set-addresses $sw-$ns "$mac dynamic"
-        ovn-nbctl lsp-set-dhcpv4-options $sw-$ns $dhcp_uuid
+
+        if [ $# -eq 1 ]; then
+            ovn-nbctl lsp-set-addresses $1-$ns "$mac"
+        fi
+
+        if [ $# -eq 3 ]; then
+            ovn-nbctl lsp-set-addresses $1-$ns "$mac dynamic"
+            ovn-nbctl lsp-set-dhcpv4-options $1-$ns $2
+        fi
+
     done
+
 }
 
 
 # function to assign interface to ovn logical switch
 # arg1: logical switch name
-# arg2: list of namespace name
 function assign-iface-to-ovn-lsp {
-    
-    if [ $# -lt 2 ]; then
-        echo "Usage: ${FUNCNAME[0]} <logical switch name> <list of namespace name>"
-        return 1
-    fi
+    ns_list=$(ip netns list | cut -d ' ' -f 1)
 
-    sw=$1
-    shift
-    for ns in $@; do
+    for ns in $ns_list; do
         ovs-vsctl add-port br-int veth-$ns-br
-        ovs-vsctl set Interface veth-$ns-br external_ids:iface-id=$sw-$ns
+        ovs-vsctl set Interface veth-$ns-br external_ids:iface-id=$1-$ns
     done
 }
 

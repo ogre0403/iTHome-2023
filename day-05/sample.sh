@@ -2,12 +2,16 @@
 
 source helper.sh
 
-# MUST use 192.168.10.0/24
-create-ns ns1 192.168.10.100
-create-ovn-ls-and-lsp   ls0
-assign-iface-to-ovn-lsp ls0 ns1
+create-ns ns1 192.168.1.1 192.168.1.254
+create-ns ns2 192.168.1.2 192.168.1.254
+create-ns ns3 10.10.0.1 10.10.0.254
 
-add-localnet-port ls0 flat0
+create-ovn-ls-and-lsp sw1 ns1 ns2
+assign-iface-to-ovn-lsp sw1 ns1 ns2
 
-# MUST use eth2
-add-bridge-mapping eth2 flat0
+create-ovn-ls-and-lsp sw2 ns3
+assign-iface-to-ovn-lsp sw2 ns3
+
+create-ovn-lr lr1
+connect-ovn-lr-to-ls lr1 sw1 192.168.1.254
+connect-ovn-lr-to-ls lr1 sw2 10.10.0.254

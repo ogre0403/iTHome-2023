@@ -1,0 +1,84 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+ENV['VAGRANT_NO_PARALLEL'] = 'yes'
+
+servers = [
+  # { :hostname => "compute-01", :ip1 => "192.168.33.20", :ip2 => "192.168.10.20", :cpu => "1", :memory => "4096" },
+  # { :hostname => "compute-02", :ip1 => "192.168.33.30", :ip2 => "192.168.10.30", :cpu => "1", :memory => "4096" },
+  { :hostname => "controller", :ip1 => "192.168.33.10", :ip2 => "192.168.10.10", :cpu => "1", :memory => "10240" },
+]
+
+
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "bento/centos-stream-8"
+  config.vm.box_version = "202304.25.0"
+
+  config.vm.provider :libvirt do |libvirt|
+    libvirt.driver = "kvm"
+  end
+
+  servers.each do |conf|
+    config.vm.define conf[:hostname] do |node|
+      node.vm.hostname = conf[:hostname]
+      node.vm.network "private_network", ip: conf[:ip1]
+      node.vm.network "private_network", ip: conf[:ip2]
+      
+      # configure hardware for different provider
+      ["libvirt", "virtualbox"].each do |provider|
+        config.vm.provider provider do |vb|
+          vb.memory = conf[:memory]
+          vb.cpus = conf[:cpu]
+        end
+      end
+
+      node.vm.provision "shell", inline: <<-SHELL
+        # https://www.rdoproject.org/install/packstack/
+        # install network-scripts explicitly 
+        dnf install network-scripts -y
+        
+        # Disable firewalld and NetworkManager
+        systemctl disable firewalld
+        systemctl stop firewalld
+        systemctl disable NetworkManager
+        systemctl stop NetworkManager
+        systemctl enable network
+        systemctl start network
+
+
+        dnf config-manager --enable powertools
+        dnf install -y centos-release-openstack-yoga
+
+        # Install Packstack Installer
+        dnf install -y openstack-packstack
+
+        # Disable selinux enforcing mode
+        setenforce 0
+        sed -i 's/^SELINUX=$/SELINUX=disabled/' /etc/selinux/config
+
+        # install tool
+        dnf install -y bridge-utils jq tcpdump
+      SHELL
+
+      if conf[:hostname] == "controller"
+        node.vm.provision "shell", inline: <<-SHELL
+          packstack --allinone \
+            --nova-libvirt-virt-type=kvm                     \
+            --keystone-admin-passwd=password                 \
+            --os-debug-mode=y                                \
+            --provision-demo=n                               \
+            --os-neutron-ml2-type-drivers=local              \
+            --os-neutron-ml2-tenant-network-types=local      \
+            --os-neutron-ml2-mechanism-drivers=ovn           \
+            --os-neutron-l2-agent=ovn                        \
+            --os-cinder-install=n                            \
+            --os-swift-install=n                             \
+            --os-aodh-install=n                              \
+            --os-ceilometer-install=n
+        SHELL
+      end
+    end
+  end
+end  
+

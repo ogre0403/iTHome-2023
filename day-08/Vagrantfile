@@ -57,7 +57,7 @@ Vagrant.configure("2") do |config|
 
         # Disable selinux enforcing mode
         setenforce 0
-        sed -i 's/^SELINUX=$/SELINUX=disabled/' /etc/selinux/config
+        sed -i s/^SELINUX=.*$/SELINUX=disabled/ /etc/selinux/config
       SHELL
 
       node.vm.provision "shell", inline: <<-SHELL

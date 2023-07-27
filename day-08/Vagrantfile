@@ -15,8 +15,7 @@ Vagrant.configure("2") do |config|
   config.vm.box = "generic/centos8s"
   config.vm.box_version = "4.2.16"
 
-  config.vm.synced_folder "../", "/libvirt",    disabled: true, type: "9p", mount: true, accessmode: "mapped"
-  config.vm.synced_folder "../", "/virtualbox", disabled: true
+  config.vm.synced_folder "../", "/vagrant", disabled: true
 
   servers.each do |conf|
     config.vm.define conf[:hostname] do |node|
@@ -81,13 +80,18 @@ Vagrant.configure("2") do |config|
             --os-cinder-install=n                            \
             --os-swift-install=n                             \
             --os-aodh-install=n                              \
+            --os-horizon-install=n                           \
             --os-ceilometer-install=n
         SHELL
 
         node.vm.provision "shell", inline: <<-SHELL
+          source /root/keystonerc_admin
+
+          # create nano flavor for cirros
+          openstack flavor create --ram 128 --disk 1 --vcpus 1 --public m1.nano
+
           ## create cirros image
           wget https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img -O /root/cirros-0.6.2-x86_64-disk.img
-          source /root/keystonerc_admin
           openstack image create cirros  --disk-format qcow2 --file /root/cirros-0.6.2-x86_64-disk.img --public
         SHELL
       end

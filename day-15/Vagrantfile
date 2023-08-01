@@ -94,6 +94,12 @@ Vagrant.configure("2") do |config|
         echo "abbrev() { a='[0-9a-fA-F]' b=\\$a\\$a c=\\$b\\$b; sed \\"s/\\$b-\\$c-\\$c-\\$c-\\$c\\$c\\$c//g\\"; }" >> /root/.bashrc
       SHELL
 
+      # add iptables allow udp 6081 rule
+      node.vm.provision "shell", inline: <<-SHELL
+        iptables -I INPUT -p udp --dport 6081 -j ACCEPT
+        iptables-save > /etc/sysconfig/iptables
+      SHELL
+
       if conf[:hostname] == "network-controller"
 
         node.vm.provision "shell" do |s|

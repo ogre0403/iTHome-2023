@@ -150,6 +150,11 @@ Vagrant.configure("2") do |config|
           ## create cirros image
           wget https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img -O /root/cirros-0.6.2-x86_64-disk.img
           openstack image create cirros  --disk-format qcow2 --file /root/cirros-0.6.2-x86_64-disk.img --public
+
+          # create security group for icmp and ssh
+          openstack security group create --description "Allow ICMP and SSH" allow-icmp-ssh
+          openstack security group rule create --protocol icmp --remote-ip 0.0.0.0/0 allow-icmp-ssh
+          openstack security group rule create --protocol tcp  --remote-ip 0.0.0.0/0 --dst-port 22:22 allow-icmp-ssh
         SHELL
 
       end

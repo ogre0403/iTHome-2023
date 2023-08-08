@@ -1,0 +1,170 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+ENV['VAGRANT_NO_PARALLEL'] = 'yes'
+
+servers = [
+  { :hostname => "compute-02",         :ip1 => "192.168.33.30", :ip2 => "192.168.10.30", :cpu => "1", :memory => "3072" },
+  { :hostname => "compute-01",         :ip1 => "192.168.33.20", :ip2 => "192.168.10.20", :cpu => "1", :memory => "3072" },
+  { :hostname => "network-controller", :ip1 => "192.168.33.10", :ip2 => "192.168.10.10", :cpu => "1", :memory => "4096"},
+]
+
+
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "generic/centos8s"
+  config.vm.box_version = "4.2.16"
+
+  config.vm.synced_folder "../", "/vagrant", disabled: true
+
+  servers.each do |conf|
+    config.vm.define conf[:hostname] do |node|
+      node.vm.hostname = conf[:hostname]
+      node.vm.network "private_network", ip: conf[:ip1]
+      node.vm.network "private_network", ip: conf[:ip2]
+      
+      # configure hardware for different provider
+      ["libvirt", "virtualbox"].each do |provider|
+        node.vm.provider provider do |vb|
+          vb.memory = conf[:memory]
+          vb.cpus = conf[:cpu]
+        end
+      end
+
+      # ip configuration 
+      node.vm.provision "shell" do |s| 
+        eth0_cfg = File.read("./ifcfg-eth0")
+        s.inline = <<-SHELL
+          # disable eth2
+          ifconfig eth2 0
+          sed -i '/^IPADDR/d' /etc/sysconfig/network-scripts/ifcfg-eth2
+          sed -i '/^NETMASK/d' /etc/sysconfig/network-scripts/ifcfg-eth2
+
+          # make eth0 from DHCP to static, otherwise packstack will fail
+          echo "#{eth0_cfg}" > /etc/sysconfig/network-scripts/ifcfg-eth0
+
+          default_gw=`route -n | grep 'UG[ \t]' | awk '{print $2}'`
+          sed -i "s/^GATEWAY.*$/GATEWAY=$default_gw/" /etc/sysconfig/network-scripts/ifcfg-eth0
+
+          eth0_ip=`ip a s eth0 | grep -E -o 'inet [0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | cut -d' ' -f2`
+          sed -i "s/^IPADDR.*$/IPADDR=$eth0_ip/" /etc/sysconfig/network-scripts/ifcfg-eth0
+        SHELL
+      end
+
+      node.vm.provision "shell", inline: <<-SHELL
+        rm -f /etc/yum.repos.d/epel*
+      SHELL
+
+      node.vm.provision "shell" do |s|
+        ssh_pub_key = File.readlines("./id_rsa.pub").first.strip
+        s.inline = <<-SHELL
+          mkdir -p /root/.ssh
+          echo #{ssh_pub_key} >> /root/.ssh/authorized_keys
+        SHELL
+      end
+
+      node.vm.provision "shell", inline: <<-SHELL
+        # https://www.rdoproject.org/install/packstack/
+        # install network-scripts explicitly 
+        dnf install network-scripts -y
+        
+        # Disable firewalld and NetworkManager
+        systemctl disable firewalld
+        systemctl stop firewalld
+        systemctl disable NetworkManager
+        systemctl stop NetworkManager
+        systemctl enable network
+        systemctl start network
+
+        dnf config-manager --enable powertools
+        dnf install -y centos-release-openstack-yoga
+
+        # Install Packstack Installer
+        dnf install -y openstack-packstack
+
+        # Disable selinux enforcing mode
+        setenforce 0
+        sed -i s/^SELINUX=.*$/SELINUX=disabled/ /etc/selinux/config
+      SHELL
+
+      node.vm.provision "shell", inline: <<-SHELL
+        # install tool
+        dnf install -y bridge-utils jq tcpdump openvswitch-test
+        # https://stackoverflow.com/questions/72244827/vagrant-machine-wont-run-sed-correctly-how-to-escape-backslashes-in-vagrant-sh
+        echo "abbrev() { a='[0-9a-fA-F]' b=\\$a\\$a c=\\$b\\$b; sed \\"s/\\$b-\\$c-\\$c-\\$c-\\$c\\$c\\$c//g\\"; }" >> /root/.bashrc
+      SHELL
+
+      # add iptables allow udp 6081 rule
+      node.vm.provision "shell", inline: <<-SHELL
+        iptables -I INPUT -p udp --dport 6081 -j ACCEPT
+        iptables-save > /etc/sysconfig/iptables
+      SHELL
+
+      if conf[:hostname] == "network-controller"
+
+        node.vm.provision "shell" do |s|
+          ssh_prv_key = File.read("./id_rsa")
+          ssh_pub_key = File.readlines("./id_rsa.pub").first.strip
+          s.inline = <<-SHELL
+            mkdir -p /root/.ssh
+            echo "#{ssh_pub_key}" > /root/.ssh/id_rsa.pub
+            echo "#{ssh_prv_key}" > /root/.ssh/id_rsa
+            chmod 600 /root/.ssh/id_rsa
+          SHELL
+        end
+
+
+        node.vm.provision "shell", inline: <<-SHELL
+          packstack                                                      \
+            --nova-libvirt-virt-type=kvm                                 \
+            --keystone-admin-passwd=password                             \
+            --os-debug-mode=y                                            \
+            --provision-demo=n                                           \
+            --os-neutron-ml2-type-drivers=flat,vlan                      \
+            --os-neutron-ml2-vlan-ranges=flat0:3001:4000                 \
+            --os-neutron-ml2-tenant-network-types=' '                    \
+            --os-neutron-ml2-mechanism-drivers=ovn                       \
+            --os-neutron-ml2-flat-networks=*                             \
+            --os-neutron-l2-agent=ovn                                    \
+            --os-neutron-ovn-bridge-mappings=extnet0:br-ex,flat0:br-eth2 \
+            --os-neutron-ovn-bridge-interfaces=br-ex:eth0,br-eth2:eth2   \
+            --os-neutron-ovn-bridges-compute=br-eth2,br-ex               \
+            --os-neutron-ovn-tunnel-if=eth1                              \
+            --os-cinder-install=n                                        \
+            --os-swift-install=n                                         \
+            --os-aodh-install=n                                          \
+            --os-ceilometer-install=n                                    \
+            --os-horizon-install=n                                       \
+            --os-controller-host=192.168.33.10                           \
+            --os-network-hosts=192.168.33.10                             \
+            --os-compute-hosts=192.168.33.20,192.168.33.30               \
+            --install-hosts=192.168.33.10,192.168.33.20,192.168.33.30     
+        SHELL
+
+        node.vm.provision "shell", inline: <<-SHELL
+          source /root/keystonerc_admin
+
+          # create nano flavor for cirros
+          openstack flavor create --ram 128 --disk 1 --vcpus 1 --public m1.nano
+
+          ## create cirros image
+          wget https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img -O /root/cirros-0.6.2-x86_64-disk.img
+          openstack image create cirros  --disk-format qcow2 --file /root/cirros-0.6.2-x86_64-disk.img --public
+
+          # create security group for icmp and ssh
+          openstack security group create --description "Allow ICMP and SSH" allow-icmp-ssh
+          openstack security group rule create --protocol icmp --remote-ip 0.0.0.0/0 allow-icmp-ssh
+          openstack security group rule create --protocol tcp  --remote-ip 0.0.0.0/0 --dst-port 22:22 allow-icmp-ssh
+        SHELL
+
+      end
+
+      # force sync time
+      node.vm.provision :shell, :run => 'always' do |s|
+        s.inline = 'chronyc -a makestep'
+      end
+
+    end
+  end
+end  
+

@@ -128,7 +128,7 @@ Vagrant.configure("2") do |config|
             --os-neutron-l2-agent=ovn                                    \
             --os-neutron-ovn-bridge-mappings=extnet0:br-ex,flat0:br-eth2 \
             --os-neutron-ovn-bridge-interfaces=br-ex:eth0,br-eth2:eth2   \
-            --os-neutron-ovn-bridges-compute=br-eth2,br-ex               \
+            --os-neutron-ovn-bridges-compute=br-eth2                     \
             --os-neutron-ovn-tunnel-if=eth1                              \
             --os-cinder-install=n                                        \
             --os-swift-install=n                                         \

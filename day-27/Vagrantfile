@@ -155,6 +155,10 @@ Vagrant.configure("2") do |config|
           openstack security group create --description "Allow ICMP and SSH" allow-icmp-ssh
           openstack security group rule create --protocol icmp --remote-ip 0.0.0.0/0 allow-icmp-ssh
           openstack security group rule create --protocol tcp  --remote-ip 0.0.0.0/0 --dst-port 22:22 allow-icmp-ssh
+
+          # enable distributerd float ip
+          echo enable_distributed_floating_ip=True >> /etc/neutron/plugins/ml2/ml2_conf.ini
+          systemctl restart neutron-*
         SHELL
 
       end
